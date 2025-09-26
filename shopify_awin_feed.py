@@ -28,7 +28,7 @@ if not SHOPIFY_API_KEY or not SHOPIFY_PASSWORD or not SHOPIFY_STORE:
 
 
 # Use latest stable Shopify API version and authenticate with X-Shopify-Access-Token header
-BASE_URL = f'https://{SHOPIFY_STORE}/admin/api/2024-01/products.json?limit=250'
+BASE_URL = f'https://{SHOPIFY_STORE}/admin/api/2024-01/products.json?limit=250&status=active'
 
 def fetch_shopify_products():
     url = BASE_URL
