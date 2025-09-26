@@ -48,7 +48,7 @@ def format_for_awin(products):
             'description': product.get('body_html', ''),
             'price': product['variants'][0]['price'],
             'currency': 'USD',  # Adjust as needed
-            'product_url': f"https://{SHOPIFY_STORE}/products/{product['handle']}",
+            'product_url': f"https://www.sarahalexis.com/products/{product['handle']}",
             'image_url': product['image']['src'] if product.get('image') else '',
             'category': product['product_type'],
             'brand': product.get('vendor', ''),
