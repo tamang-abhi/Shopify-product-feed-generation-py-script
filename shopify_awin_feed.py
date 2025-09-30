@@ -12,7 +12,7 @@ SHOPIFY_API_KEY = os.getenv('SHOPIFY_API_KEY')
 SHOPIFY_PASSWORD = os.getenv('SHOPIFY_PASSWORD')
 SHOPIFY_STORE = os.getenv('SHOPIFY_STORE')
 
-# AWIN CSV column headers (your full list – kept intact for compatibility)
+# Full AWIN CSV column headers (your current list)
 AWIN_HEADERS = [
     'product_id', 'merchant_category', 'price', 'brand_name', 'upc', 'ean', 'mpn', 'isbn', 'model_number', 'product_name',
     'description', 'specifications', 'promotional_text', 'language', 'deep_link', 'merchant_thumb', 'image_url', 'delivery_time',
@@ -20,6 +20,35 @@ AWIN_HEADERS = [
     'warranty', 'condition', 'product_type', 'parent_product_id', 'commission_group', 'last_updated', 'dimensions', 'colour',
     'keywords', 'custom1', 'custom2', 'custom3', 'custom4', 'custom5', 'saving', 'delivery_restrictions', 'reviews',
     'average_rating', 'rating', 'alternate_image', 'large_image', 'basket_link'
+]
+
+# Define category mapping
+CATEGORY_MAP = {
+    "Dresses": "Apparel & Accessories > Clothing > Dresses",
+    "Tops": "Apparel & Accessories > Clothing > Shirts & Tops",
+    "Sweater": "Apparel & Accessories > Clothing > Sweaters",
+    "Pants": "Apparel & Accessories > Clothing > Pants",
+    "Skirts": "Apparel & Accessories > Clothing > Skirts",
+    "Accessories": "Apparel & Accessories > Clothing Accessories",
+    "Scarves": "Apparel & Accessories > Clothing Accessories > Scarves",
+    "Jewelry": "Apparel & Accessories > Jewelry",
+    "": "Apparel & Accessories > Miscellaneous",   # fallback for empty product_type
+}
+
+
+# Minimal AWIN-required headers
+AWIN_MINIMAL_HEADERS = [
+    'product_id',
+    'product_name',
+    'description',
+    'deep_link',
+    'price',
+    'currency',
+    'brand_name',
+    'merchant_category',
+    'image_url',
+    'in_stock',
+    'stock_quantity'
 ]
 
 # Use latest stable Shopify API version and authenticate with X-Shopify-Access-Token header
@@ -35,7 +64,6 @@ def fetch_shopify_products():
     products = response.json().get('products', [])
     return products
 
-# Save raw Shopify data to CSV
 def write_shopify_csv(filename, products):
     if not products:
         print('No products to write to Shopify data CSV.')
@@ -59,33 +87,31 @@ def format_for_awin(products):
     awin_rows = []
     for product in products:
         if not product.get('variants'):
-            continue  # skip products with no variants
+            continue
 
-        variant = product['variants'][0]  # first variant
+        variant = product['variants'][0]
         price = variant.get('price')
         sku = variant.get('sku', '').strip()
 
-        # Skip products missing essential info
         if not price or not sku:
             continue
 
         images = product.get('images', [])
         image_url = images[0]['src'] if images else (product['image']['src'] if product.get('image') else '')
         alternate_image = images[1]['src'] if len(images) > 1 else ''
-
-        # Find largest image
         large_image = ''
         if images:
             large = max(images, key=lambda img: img.get('width', 0) * img.get('height', 0))
             large_image = large.get('src', '')
 
-        # Fallback values
-        category = product.get('product_type') or "Accessories"
+         # Map product_type to AWIN-friendly category
+        raw_category = product.get('product_type', '').strip()
+        category = CATEGORY_MAP.get(raw_category, "Apparel & Accessories > Miscellaneous")
         brand = product.get('vendor') or "Generic"
         description = clean_html(product.get('body_html', ''))
 
         row = {
-            'product_id': sku,  # use SKU instead of giant Shopify ID
+            'product_id': sku,
             'merchant_category': category,
             'price': price,
             'brand_name': brand,
@@ -98,7 +124,7 @@ def format_for_awin(products):
             'description': description,
             'specifications': '',
             'promotional_text': '',
-            'language': 'en',
+            'language': 'en_US',
             'deep_link': f"https://www.sarahalexis.com/products/{product.get('handle', '')}",
             'merchant_thumb': product['image']['src'] if product.get('image') else '',
             'image_url': image_url,
@@ -138,20 +164,28 @@ def format_for_awin(products):
         awin_rows.append(row)
     return awin_rows
 
-def write_csv(filename, rows):
+def write_csv(filename, rows, headers):
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=AWIN_HEADERS)
+        writer = csv.DictWriter(csvfile, fieldnames=headers)
         writer.writeheader()
         for row in rows:
-            writer.writerow(row)
+            # Keep only the keys that exist in headers
+            writer.writerow({h: row.get(h, '') for h in headers})
 
 def main():
     products = fetch_shopify_products()
     write_shopify_csv('shopify_data.csv', products)
+
     awin_rows = format_for_awin(products)
-    write_csv('awin_product_feed.csv', awin_rows)
+
+    # Write full feed
+    write_csv('awin_full_feed.csv', awin_rows, AWIN_HEADERS)
+    # Write minimal feed
+    write_csv('awin_minimal_feed.csv', awin_rows, AWIN_MINIMAL_HEADERS)
+
     print('Shopify data saved: shopify_data.csv')
-    print('AWIN product feed generated: awin_product_feed.csv')
+    print('AWIN full feed generated: awin_full_feed.csv')
+    print('AWIN minimal feed generated: awin_minimal_feed.csv')
 
 if __name__ == '__main__':
     main()
