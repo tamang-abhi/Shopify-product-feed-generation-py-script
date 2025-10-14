@@ -2,6 +2,7 @@ import csv
 import requests
 import os
 import re
+import json
 from dotenv import load_dotenv
 
 # Load environment variables from .env file if present
@@ -89,12 +90,22 @@ def format_for_awin(products):
         if not product.get('variants'):
             continue
 
+        # Use the first variant for price/sku but compute stock from all variants
         variant = product['variants'][0]
         price = variant.get('price')
         sku = variant.get('sku', '').strip()
 
         if not price or not sku:
             continue
+
+        # Sum inventory quantities across all variants (fall back to 0)
+        total_stock = 0
+        for v in product.get('variants', []):
+            try:
+                qty = int(v.get('inventory_quantity') or 0)
+            except (TypeError, ValueError):
+                qty = 0
+            total_stock += qty
 
         images = product.get('images', [])
         image_url = images[0]['src'] if images else (product['image']['src'] if product.get('image') else '')
@@ -135,8 +146,8 @@ def format_for_awin(products):
             'delivery_cost': '',
             'web_offer': variant.get('compare_at_price', ''),
             'pre_order': '',
-            'in_stock': '1' if variant.get('inventory_quantity', 0) > 0 else '0',
-            'stock_quantity': variant.get('inventory_quantity', 0),
+            'in_stock': '1' if total_stock > 0 else '0',
+            'stock_quantity': total_stock,
             'is_for_sale': '1' if product.get('status', '') == 'active' else '0',
             'warranty': '',
             'condition': 'new',
@@ -174,9 +185,19 @@ def write_csv(filename, rows, headers):
 
 def main():
     products = fetch_shopify_products()
+    # Print number of fetched products for quick testing/debugging
+    # print(f"Fetched {len(products)} products from Shopify.")
+    
     write_shopify_csv('shopify_data.csv', products)
 
     awin_rows = format_for_awin(products)
+
+    # Pretty-print full products JSON for debugging (inspect in terminal)
+    # try:
+    #     print(json.dumps(awin_rows, indent=2, ensure_ascii=False))
+    # except Exception as e:
+    #     print(f"Failed to print products JSON: {e}")
+
 
     # Write full feed
     write_csv('awin_full_feed.csv', awin_rows, AWIN_HEADERS)
